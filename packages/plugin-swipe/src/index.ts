@@ -92,13 +92,9 @@ export class Swipe extends BasePlugin {
           | ImageryLayer
           | undefined;
         if (base) {
-          if (this._leftLayerIds.includes("__base__")) {
-            base.splitDirection = SplitDirection.LEFT as any;
-          } else if (this._rightLayerIds.includes("__base__")) {
-            base.splitDirection = SplitDirection.RIGHT as any;
-          } else {
-            base.splitDirection = SplitDirection.NONE as any;
-          }
+          // 兜底策略：底图永远渲染在两侧。
+          // 否则当某一侧没有任何影像层时，会出现“空白灰色”的视觉效果。
+          base.splitDirection = SplitDirection.NONE as any;
         }
 
         if (this.viewer?.scene?.requestRender)
@@ -309,8 +305,27 @@ export class SwipeCore {
     }
 
     const imageryLayers = viewer.imageryLayers;
+
+    // 兜底底图：保持在两侧都渲染，避免左/右为空时变灰。
+    // 优先使用 layerManager.baseLayer，否则退化为 imageryLayers 的第一个。
+    let baseLayer: ImageryLayer | undefined;
+    try {
+      const lmBase = (this.earth as any)?.layerManager?.baseLayer;
+      if (lmBase instanceof ImageryLayer) baseLayer = lmBase;
+    } catch {
+      // ignore
+    }
+    if (!baseLayer && imageryLayers.length > 0) {
+      baseLayer = imageryLayers.get(0);
+    }
+
     for (let i = 0; i < imageryLayers.length; i++) {
       const layer = imageryLayers.get(i);
+      if (baseLayer && layer === baseLayer) {
+        layer.splitDirection = SplitDirection.NONE;
+        continue;
+      }
+
       if (this.leftCesiumLayers.includes(layer)) {
         layer.splitDirection = SplitDirection.LEFT;
       } else {
